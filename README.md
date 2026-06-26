@@ -69,6 +69,7 @@ gh pr-review-thread-resolver list 123 -R OWNER/REPO --all
 - Top-level PR comments do not have a resolved state. Only inline review threads do.
 - GitHub review threads are not nested trees. A thread has a flat `comments.nodes` list: parent inline comment plus replies.
 - `list` includes `isOutdated`, `viewerCanResolve`, `viewerCanUnresolve`, and up to 20 comments per thread in JSON output.
+- Comment output includes `comments.totalCount` and `comments.pageInfo.hasNextPage`. Text output says `comments=20/23; more not shown` when a thread has more replies than were fetched.
 - `--not-outdated` filters out stale diff threads. Without it, outdated unresolved threads are still shown and marked `outdated` in text output.
 - `list` currently reads the first 100 review threads.
 - Requires `gh` auth with pull request read/write access for private repos and resolving.

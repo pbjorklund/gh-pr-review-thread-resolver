@@ -133,7 +133,7 @@ cmd_list() {
     -F name="$NAME" \
     -F pr="$PR" \
     -f query="$THREADS_QUERY" \
-    --jq "$jq_filter | .[] | [.id, (if .isResolved then \"resolved\" else \"open\" end), (if .isOutdated then \"outdated\" else \"current\" end), .path, (.line // \"\" | tostring), (.viewerCanResolve | tostring), (.viewerCanUnresolve | tostring), (.comments.nodes | length | tostring), (.comments.nodes[0].author.login // \"\"), (.comments.nodes[0].url // \"\"), ((.comments.nodes[0].body // \"\") | split(\"\\n\")[0])] | @tsv")"
+    --jq "$jq_filter | .[] | [.id, (if .isResolved then \"resolved\" else \"open\" end), (if .isOutdated then \"outdated\" else \"current\" end), .path, (.line // \"\" | tostring), (.viewerCanResolve | tostring), (.viewerCanUnresolve | tostring), (if .comments.pageInfo.hasNextPage then ((.comments.nodes | length | tostring) + \"/\" + (.comments.totalCount | tostring) + \"; more not shown\") else (.comments.totalCount | tostring) end), (.comments.nodes[0].author.login // \"\"), (.comments.nodes[0].url // \"\"), ((.comments.nodes[0].body // \"\") | split(\"\\n\")[0])] | @tsv")"
 
   if [[ -z "$tsv" ]]; then
     if [[ "$all" == true ]]; then
@@ -233,6 +233,11 @@ query($owner: String!, $name: String!, $pr: Int!) {
           line
           isOutdated
           comments(first: 20) {
+            totalCount
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
             nodes {
               body
               url
