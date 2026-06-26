@@ -6,7 +6,7 @@ usage() {
 gh pr-review-thread-resolver - resolve GitHub PR review threads from the CLI
 
 USAGE
-  gh pr-review-thread-resolver list [<pr>] [-R OWNER/REPO] [--all] [--json]
+  gh pr-review-thread-resolver list [<pr>] [-R OWNER/REPO] [--all] [--not-outdated] [--json]
   gh pr-review-thread-resolver resolve <thread-id>
   gh pr-review-thread-resolver unresolve <thread-id>
 
@@ -16,8 +16,9 @@ COMMANDS
   unresolve  Mark one review thread unresolved
 
 NOTES
-  GitHub calls these "review threads". Top-level PR comments do not have a
-  resolved state. Use the thread id from `list`, not a numeric REST comment id.
+  GitHub calls these "review threads". A thread contains a flat list of comments,
+  including replies. Top-level PR comments do not have a resolved state. Use the
+  thread id from `list`, not a numeric REST comment id.
 EOF
 }
 
@@ -60,6 +61,7 @@ cmd_list() {
 
   local all=false
   local json=false
+  local not_outdated=false
   REPO=""
   PR=""
 
@@ -76,6 +78,10 @@ cmd_list() {
         ;;
       --json)
         json=true
+        shift
+        ;;
+      --not-outdated)
+        not_outdated=true
         shift
         ;;
       -h|--help)
@@ -103,11 +109,12 @@ cmd_list() {
   fi
   [[ "$PR" =~ ^[0-9]+$ ]] || die "PR must be a number, got: $PR"
 
-  local jq_filter
-  if [[ "$all" == true ]]; then
-    jq_filter='.data.repository.pullRequest.reviewThreads.nodes'
-  else
-    jq_filter='.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false))'
+  local jq_filter='.data.repository.pullRequest.reviewThreads.nodes'
+  if [[ "$all" != true ]]; then
+    jq_filter="$jq_filter | map(select(.isResolved == false))"
+  fi
+  if [[ "$not_outdated" == true ]]; then
+    jq_filter="$jq_filter | map(select(.isOutdated == false))"
   fi
 
   if [[ "$json" == true ]]; then
@@ -126,7 +133,7 @@ cmd_list() {
     -F name="$NAME" \
     -F pr="$PR" \
     -f query="$THREADS_QUERY" \
-    --jq "$jq_filter | .[] | [.id, (if .isResolved then \"resolved\" else \"open\" end), .path, (.line // \"\" | tostring), (.viewerCanResolve | tostring), (.comments.nodes[0].author.login // \"\"), (.comments.nodes[0].url // \"\"), ((.comments.nodes[0].body // \"\") | split(\"\\n\")[0])] | @tsv")"
+    --jq "$jq_filter | .[] | [.id, (if .isResolved then \"resolved\" else \"open\" end), (if .isOutdated then \"outdated\" else \"current\" end), .path, (.line // \"\" | tostring), (.viewerCanResolve | tostring), (.viewerCanUnresolve | tostring), (.comments.nodes | length | tostring), (.comments.nodes[0].author.login // \"\"), (.comments.nodes[0].url // \"\"), ((.comments.nodes[0].body // \"\") | split(\"\\n\")[0])] | @tsv")"
 
   if [[ -z "$tsv" ]]; then
     if [[ "$all" == true ]]; then
@@ -137,8 +144,8 @@ cmd_list() {
     return
   fi
 
-  while IFS=$'\t' read -r id state path line can_resolve author url body; do
-    printf '%s  %s:%s  @%s  can_resolve=%s\n' "$id" "$path" "$line" "$author" "$can_resolve"
+  while IFS=$'\t' read -r id state freshness path line can_resolve can_unresolve comment_count author url body; do
+    printf '%s  %s:%s  @%s  state=%s  %s  comments=%s  can_resolve=%s  can_unresolve=%s\n' "$id" "$path" "$line" "$author" "$state" "$freshness" "$comment_count" "$can_resolve" "$can_unresolve"
     printf '  %s\n' "$url"
     if [[ -n "$body" ]]; then
       printf '  %s\n' "$body"
@@ -210,6 +217,8 @@ cmd_unresolve() {
   mutate_thread unresolveReviewThread unresolveReviewThread "$thread_id"
 }
 
+# GraphQL variables are expanded by GitHub, not by this shell script.
+# shellcheck disable=SC2016
 THREADS_QUERY='
 query($owner: String!, $name: String!, $pr: Int!) {
   repository(owner: $owner, name: $name) {
@@ -222,10 +231,12 @@ query($owner: String!, $name: String!, $pr: Int!) {
           viewerCanUnresolve
           path
           line
-          comments(first: 1) {
+          isOutdated
+          comments(first: 20) {
             nodes {
               body
               url
+              createdAt
               author { login }
             }
           }

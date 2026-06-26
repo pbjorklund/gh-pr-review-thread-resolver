@@ -33,6 +33,12 @@ List unresolved review threads for a specific PR:
 gh pr-review-thread-resolver list 123 -R OWNER/REPO
 ```
 
+List unresolved review threads and skip outdated diff threads:
+
+```sh
+gh pr-review-thread-resolver list 123 -R OWNER/REPO --not-outdated
+```
+
 Resolve a thread:
 
 ```sh
@@ -61,8 +67,22 @@ gh pr-review-thread-resolver list 123 -R OWNER/REPO --all
 
 - Use the thread ID from `list`, not a numeric REST comment ID.
 - Top-level PR comments do not have a resolved state. Only inline review threads do.
+- GitHub review threads are not nested trees. A thread has a flat `comments.nodes` list: parent inline comment plus replies.
+- `list` includes `isOutdated`, `viewerCanResolve`, `viewerCanUnresolve`, and up to 20 comments per thread in JSON output.
+- `--not-outdated` filters out stale diff threads. Without it, outdated unresolved threads are still shown and marked `outdated` in text output.
 - `list` currently reads the first 100 review threads.
 - Requires `gh` auth with pull request read/write access for private repos and resolving.
+
+## Agent usage
+
+Agents should use this extension when handling GitHub PR review feedback:
+
+```sh
+gh pr-review-thread-resolver list 123 -R OWNER/REPO --not-outdated --json
+gh pr-review-thread-resolver resolve PRRT_...
+```
+
+A machine-readable skill is included in `SKILL.md` for agent systems that can load repository skills.
 
 ## Development
 
