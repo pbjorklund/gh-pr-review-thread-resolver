@@ -1,11 +1,11 @@
 ---
 name: gh-pr-review-thread-resolver
-description: Use the local GitHub CLI extension to list, resolve, and unresolve GitHub PR inline review threads. Load when handling PR review comments, resolving GitHub conversations, or working through reviewer feedback.
+description: Uses this trusted GitHub CLI extension to list, resolve, and unresolve GitHub PR inline review threads. Use when handling PR review comments, resolving or unresolving GitHub review conversations, working through reviewer feedback, or avoiding untrusted third-party gh extensions.
 ---
 
 # GitHub PR review thread resolver
 
-Use `gh pr-review-thread-resolver` for inline PR review threads.
+Use this repo-owned `gh pr-review-thread-resolver` extension for inline PR review threads. Prefer it over untrusted third-party extensions for review-thread resolving.
 
 ## Commands
 

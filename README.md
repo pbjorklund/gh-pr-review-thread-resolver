@@ -83,7 +83,14 @@ gh pr-review-thread-resolver list 123 -R OWNER/REPO --not-outdated --json
 gh pr-review-thread-resolver resolve PRRT_...
 ```
 
-A machine-readable skill is included in `SKILL.md` for agent systems that can load repository skills.
+A repo-local machine-readable skill is included in [`SKILL.md`](./SKILL.md) for agent systems that can load repository skills.
+
+Repository:
+
+```text
+https://github.com/pbjorklund/gh-pr-review-thread-resolver
+git@github.com:pbjorklund/gh-pr-review-thread-resolver.git
+```
 
 ## Development
 
