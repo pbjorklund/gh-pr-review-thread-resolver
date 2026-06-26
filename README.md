@@ -83,7 +83,7 @@ gh pr-review-thread-resolver list 123 -R OWNER/REPO --not-outdated --json
 gh pr-review-thread-resolver resolve PRRT_...
 ```
 
-A repo-local machine-readable skill is included in [`SKILL.md`](./SKILL.md) for agent systems that can load repository skills.
+Repo-local agent guidance is in [`AGENTS.md`](./AGENTS.md). Reusable workflow guidance belongs in the global `github-extensions` skill, exposed at `~/.agents/skills/github-extensions/SKILL.md` on this machine.
 
 Repository:
 
