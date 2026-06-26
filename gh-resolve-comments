@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+gh resolve-comments - resolve GitHub PR review threads from the CLI
+
+USAGE
+  gh resolve-comments list [<pr>] [-R OWNER/REPO] [--all] [--json]
+  gh resolve-comments resolve <thread-id>
+  gh resolve-comments unresolve <thread-id>
+
+COMMANDS
+  list       List unresolved inline review threads on a PR
+  resolve    Mark one review thread resolved
+  unresolve  Mark one review thread unresolved
+
+NOTES
+  GitHub calls these "review threads". Top-level PR comments do not have a
+  resolved state. Use the thread id from `list`, not a numeric REST comment id.
+EOF
+}
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+need_gh() {
+  command -v gh >/dev/null 2>&1 || die "GitHub CLI (gh) is required"
+}
+
+split_repo() {
+  local repo="$1"
+  case "$repo" in
+    */*)
+      OWNER="${repo%%/*}"
+      NAME="${repo#*/}"
+      ;;
+    *)
+      die "repo must be OWNER/REPO, got: $repo"
+      ;;
+  esac
+}
+
+current_repo() {
+  gh repo view --json owner,name --jq '.owner.login + "/" + .name'
+}
+
+current_pr() {
+  local repo_arg=()
+  if [[ -n "${REPO:-}" ]]; then
+    repo_arg=(--repo "$REPO")
+  fi
+  gh pr view "${PR:-}" "${repo_arg[@]}" --json number --jq '.number'
+}
+
+cmd_list() {
+  need_gh
+
+  local all=false
+  local json=false
+  REPO=""
+  PR=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -R|--repo)
+        [[ $# -ge 2 ]] || die "$1 requires OWNER/REPO"
+        REPO="$2"
+        shift 2
+        ;;
+      --all)
+        all=true
+        shift
+        ;;
+      --json)
+        json=true
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      --*)
+        die "unknown option for list: $1"
+        ;;
+      *)
+        [[ -z "$PR" ]] || die "only one PR number may be supplied"
+        PR="$1"
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -z "$REPO" ]]; then
+    REPO="$(current_repo)"
+  fi
+  split_repo "$REPO"
+
+  if [[ -z "$PR" ]]; then
+    PR="$(current_pr)"
+  fi
+  [[ "$PR" =~ ^[0-9]+$ ]] || die "PR must be a number, got: $PR"
+
+  local jq_filter
+  if [[ "$all" == true ]]; then
+    jq_filter='.data.repository.pullRequest.reviewThreads.nodes'
+  else
+    jq_filter='.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved == false))'
+  fi
+
+  if [[ "$json" == true ]]; then
+    gh api graphql \
+      -F owner="$OWNER" \
+      -F name="$NAME" \
+      -F pr="$PR" \
+      -f query="$THREADS_QUERY" \
+      --jq "$jq_filter"
+    return
+  fi
+
+  local tsv
+  tsv="$(gh api graphql \
+    -F owner="$OWNER" \
+    -F name="$NAME" \
+    -F pr="$PR" \
+    -f query="$THREADS_QUERY" \
+    --jq "$jq_filter | .[] | [.id, (if .isResolved then \"resolved\" else \"open\" end), .path, (.line // \"\" | tostring), (.viewerCanResolve | tostring), (.comments.nodes[0].author.login // \"\"), (.comments.nodes[0].url // \"\"), ((.comments.nodes[0].body // \"\") | split(\"\\n\")[0])] | @tsv")"
+
+  if [[ -z "$tsv" ]]; then
+    if [[ "$all" == true ]]; then
+      printf 'No review threads found on %s#%s.\n' "$REPO" "$PR"
+    else
+      printf 'No unresolved review threads found on %s#%s.\n' "$REPO" "$PR"
+    fi
+    return
+  fi
+
+  while IFS=$'\t' read -r id state path line can_resolve author url body; do
+    printf '%s  %s:%s  @%s  can_resolve=%s\n' "$id" "$path" "$line" "$author" "$can_resolve"
+    printf '  %s\n' "$url"
+    if [[ -n "$body" ]]; then
+      printf '  %s\n' "$body"
+    fi
+    printf '\n'
+  done <<< "$tsv"
+}
+
+mutate_thread() {
+  local mutation_name="$1"
+  local response_key="$2"
+  local thread_id="$3"
+  [[ -n "$thread_id" ]] || die "thread id is required"
+
+  need_gh
+  gh api graphql \
+    -F threadId="$thread_id" \
+    -f query="mutation(\$threadId: ID!) { ${mutation_name}(input: {threadId: \$threadId}) { thread { id isResolved } } }" \
+    --jq ".data.${response_key}.thread"
+}
+
+cmd_resolve() {
+  local thread_id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      -R|--repo)
+        [[ $# -ge 2 ]] || die "$1 requires OWNER/REPO"
+        shift 2 # accepted for gh muscle memory; thread IDs are global
+        ;;
+      --*)
+        die "unknown option for resolve: $1"
+        ;;
+      *)
+        [[ -z "$thread_id" ]] || die "only one thread id may be supplied"
+        thread_id="$1"
+        shift
+        ;;
+    esac
+  done
+  mutate_thread resolveReviewThread resolveReviewThread "$thread_id"
+}
+
+cmd_unresolve() {
+  local thread_id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      -R|--repo)
+        [[ $# -ge 2 ]] || die "$1 requires OWNER/REPO"
+        shift 2 # accepted for gh muscle memory; thread IDs are global
+        ;;
+      --*)
+        die "unknown option for unresolve: $1"
+        ;;
+      *)
+        [[ -z "$thread_id" ]] || die "only one thread id may be supplied"
+        thread_id="$1"
+        shift
+        ;;
+    esac
+  done
+  mutate_thread unresolveReviewThread unresolveReviewThread "$thread_id"
+}
+
+THREADS_QUERY='
+query($owner: String!, $name: String!, $pr: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $pr) {
+      reviewThreads(first: 100) {
+        nodes {
+          id
+          isResolved
+          viewerCanResolve
+          viewerCanUnresolve
+          path
+          line
+          comments(first: 1) {
+            nodes {
+              body
+              url
+              author { login }
+            }
+          }
+        }
+      }
+    }
+  }
+}'
+
+case "${1:-}" in
+  list)
+    shift
+    cmd_list "$@"
+    ;;
+  resolve)
+    shift
+    cmd_resolve "$@"
+    ;;
+  unresolve)
+    shift
+    cmd_unresolve "$@"
+    ;;
+  -h|--help|"")
+    usage
+    ;;
+  *)
+    die "unknown command: $1"
+    ;;
+esac
