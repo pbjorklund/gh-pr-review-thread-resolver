@@ -1,4 +1,4 @@
-# gh-resolve-comments
+# gh-pr-review-thread-resolver
 
 A small GitHub CLI extension for resolving PR review threads without a third-party dependency.
 
@@ -9,14 +9,14 @@ GitHub exposes "Resolve conversation" for inline PR review comments through Grap
 From this local checkout:
 
 ```sh
-cd /home/pbjorklund/Projects/gh-resolve-comments
+cd /home/pbjorklund/Projects/gh-pr-review-thread-resolver
 gh extension install .
 ```
 
 After publishing to GitHub, install with:
 
 ```sh
-gh extension install pbjorklund/gh-resolve-comments
+gh extension install pbjorklund/gh-pr-review-thread-resolver
 ```
 
 ## Usage
@@ -24,37 +24,37 @@ gh extension install pbjorklund/gh-resolve-comments
 List unresolved review threads for the current branch's PR:
 
 ```sh
-gh resolve-comments list
+gh pr-review-thread-resolver list
 ```
 
 List unresolved review threads for a specific PR:
 
 ```sh
-gh resolve-comments list 123 -R OWNER/REPO
+gh pr-review-thread-resolver list 123 -R OWNER/REPO
 ```
 
 Resolve a thread:
 
 ```sh
-gh resolve-comments resolve PRRT_...
+gh pr-review-thread-resolver resolve PRRT_...
 ```
 
 Unresolve a thread:
 
 ```sh
-gh resolve-comments unresolve PRRT_...
+gh pr-review-thread-resolver unresolve PRRT_...
 ```
 
 Return raw JSON:
 
 ```sh
-gh resolve-comments list 123 -R OWNER/REPO --json
+gh pr-review-thread-resolver list 123 -R OWNER/REPO --json
 ```
 
 Include already-resolved threads:
 
 ```sh
-gh resolve-comments list 123 -R OWNER/REPO --all
+gh pr-review-thread-resolver list 123 -R OWNER/REPO --all
 ```
 
 ## Notes
@@ -67,6 +67,6 @@ gh resolve-comments list 123 -R OWNER/REPO --all
 ## Development
 
 ```sh
-bash -n gh-resolve-comments
-./gh-resolve-comments --help
+bash -n gh-pr-review-thread-resolver
+./gh-pr-review-thread-resolver --help
 ```

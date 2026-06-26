@@ -3,12 +3,12 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-gh resolve-comments - resolve GitHub PR review threads from the CLI
+gh pr-review-thread-resolver - resolve GitHub PR review threads from the CLI
 
 USAGE
-  gh resolve-comments list [<pr>] [-R OWNER/REPO] [--all] [--json]
-  gh resolve-comments resolve <thread-id>
-  gh resolve-comments unresolve <thread-id>
+  gh pr-review-thread-resolver list [<pr>] [-R OWNER/REPO] [--all] [--json]
+  gh pr-review-thread-resolver resolve <thread-id>
+  gh pr-review-thread-resolver unresolve <thread-id>
 
 COMMANDS
   list       List unresolved inline review threads on a PR
