@@ -1,6 +1,6 @@
 # gh-pr-review-thread-resolver
 
-A small GitHub CLI extension for resolving PR review threads without a third-party dependency.
+A small GitHub CLI extension for resolving PR review threads. The `list` command requires `jq`.
 
 GitHub exposes "Resolve conversation" for inline PR review comments through GraphQL, not through a high-level `gh pr` command. This extension wraps the official `resolveReviewThread` and `unresolveReviewThread` mutations.
 
@@ -71,8 +71,8 @@ gh pr-review-thread-resolver list 123 -R OWNER/REPO --all
 - `list` includes `isOutdated`, `viewerCanResolve`, `viewerCanUnresolve`, and up to 20 comments per thread in JSON output.
 - Comment output includes `comments.totalCount` and `comments.pageInfo.hasNextPage`. Text output says `comments=20/23; more not shown` when a thread has more replies than were fetched.
 - `--not-outdated` filters out stale diff threads. Without it, outdated unresolved threads are still shown and marked `outdated` in text output.
-- `list` currently reads the first 100 review threads.
-- Requires `gh` auth with pull request read/write access for private repos and resolving.
+- `list` paginates all review threads on a PR via GraphQL cursor pagination, so PRs with more than 100 threads are fully read.
+- Requires `gh` auth with pull request read/write access for private repos and resolving, plus `jq` for `list`.
 
 ## Agent usage
 

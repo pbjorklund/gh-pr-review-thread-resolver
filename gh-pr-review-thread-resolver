@@ -31,6 +31,10 @@ need_gh() {
   command -v gh >/dev/null 2>&1 || die "GitHub CLI (gh) is required"
 }
 
+need_jq() {
+  command -v jq >/dev/null 2>&1 || die "jq is required for list"
+}
+
 split_repo() {
   local repo="$1"
   case "$repo" in
@@ -58,6 +62,7 @@ current_pr() {
 
 cmd_list() {
   need_gh
+  need_jq
 
   local all=false
   local json=false
@@ -109,31 +114,32 @@ cmd_list() {
   fi
   [[ "$PR" =~ ^[0-9]+$ ]] || die "PR must be a number, got: $PR"
 
-  local jq_filter='.data.repository.pullRequest.reviewThreads.nodes'
+  # gh api graphql --paginate requires --slurp to return valid JSON, and --slurp
+  # is incompatible with --jq. Fetch all pages as a JSON array of page objects,
+  # then flatten and filter with jq in a second pass. This paginates review
+  # threads so PRs with more than 100 threads are fully read.
+  local raw
+  raw="$(gh api graphql --paginate --slurp \
+    -F owner="$OWNER" \
+    -F name="$NAME" \
+    -F pr="$PR" \
+    -f query="$THREADS_QUERY")"
+
+  local nodes_filter='[.[]] | [.[].data.repository.pullRequest.reviewThreads.nodes] | add // []'
   if [[ "$all" != true ]]; then
-    jq_filter="$jq_filter | map(select(.isResolved == false))"
+    nodes_filter="$nodes_filter | map(select(.isResolved == false))"
   fi
   if [[ "$not_outdated" == true ]]; then
-    jq_filter="$jq_filter | map(select(.isOutdated == false))"
+    nodes_filter="$nodes_filter | map(select(.isOutdated == false))"
   fi
 
   if [[ "$json" == true ]]; then
-    gh api graphql \
-      -F owner="$OWNER" \
-      -F name="$NAME" \
-      -F pr="$PR" \
-      -f query="$THREADS_QUERY" \
-      --jq "$jq_filter"
+    printf '%s' "$raw" | jq -c "$nodes_filter"
     return
   fi
 
   local tsv
-  tsv="$(gh api graphql \
-    -F owner="$OWNER" \
-    -F name="$NAME" \
-    -F pr="$PR" \
-    -f query="$THREADS_QUERY" \
-    --jq "$jq_filter | .[] | [.id, (if .isResolved then \"resolved\" else \"open\" end), (if .isOutdated then \"outdated\" else \"current\" end), .path, (.line // \"\" | tostring), (.viewerCanResolve | tostring), (.viewerCanUnresolve | tostring), (if .comments.pageInfo.hasNextPage then ((.comments.nodes | length | tostring) + \"/\" + (.comments.totalCount | tostring) + \"; more not shown\") else (.comments.totalCount | tostring) end), (.comments.nodes[0].author.login // \"\"), (.comments.nodes[0].url // \"\"), ((.comments.nodes[0].body // \"\") | split(\"\\n\")[0])] | @tsv")"
+  tsv="$(printf '%s' "$raw" | jq -r "$nodes_filter | .[] | [.id, (if .isResolved then \"resolved\" else \"open\" end), (if .isOutdated then \"outdated\" else \"current\" end), .path, (.line // \"\" | tostring), (.viewerCanResolve | tostring), (.viewerCanUnresolve | tostring), (if .comments.pageInfo.hasNextPage then ((.comments.nodes | length | tostring) + \"/\" + (.comments.totalCount | tostring) + \"; more not shown\") else (.comments.totalCount | tostring) end), (.comments.nodes[0].author.login // \"\"), (.comments.nodes[0].url // \"\"), ((.comments.nodes[0].body // \"\") | split(\"\\n\")[0])] | @tsv")"
 
   if [[ -z "$tsv" ]]; then
     if [[ "$all" == true ]]; then
@@ -220,10 +226,10 @@ cmd_unresolve() {
 # GraphQL variables are expanded by GitHub, not by this shell script.
 # shellcheck disable=SC2016
 THREADS_QUERY='
-query($owner: String!, $name: String!, $pr: Int!) {
+query($owner: String!, $name: String!, $pr: Int!, $endCursor: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $pr) {
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $endCursor) {
         nodes {
           id
           isResolved
@@ -236,7 +242,6 @@ query($owner: String!, $name: String!, $pr: Int!) {
             totalCount
             pageInfo {
               hasNextPage
-              endCursor
             }
             nodes {
               body
@@ -245,6 +250,10 @@ query($owner: String!, $name: String!, $pr: Int!) {
               author { login }
             }
           }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
         }
       }
     }
